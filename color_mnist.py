@@ -8,10 +8,10 @@ from matplotlib import pyplot as plt
 from torchvision import datasets, transforms
 from torchvision.datasets import MNIST
 import numpy as np
-
+from torch.optim import Adam
 import visualize
 from Trainer import Trainer
-
+from torch.autograd import Variable
 from visualize import Visualizer as Viz
 from torch import optim
 from typing import Callable, Optional
@@ -30,8 +30,6 @@ colors = {
 }
 
 from models import VAE
-
-
 
 
 class color(object):
@@ -72,9 +70,27 @@ def wrapper(x):
             download = True if train else False
             super().__init__(root, train, transforme, download=download)
 
-
-
     return _wrap
+
+
+def plot_latent(autoencoder, data_loader, mode, num_batches=100):
+    """
+    Plotting the Autoencoder's latent space
+    :param autoencoder: Autoencoder model
+    :param data_loader:
+    :param device: cuda/cpu
+    :param mode: 'continuous' or 'discrete' - used in plot's title
+    :param num_batches: #points to plot
+    """
+    for i, (x, y) in enumerate(data_loader):
+        z = autoencoder.encode(Variable(x))
+        z = z.to('cpu').detach().numpy()
+        plt.scatter(z[:, 0], z[:, 1], c=y, cmap='tab10')
+        if i > num_batches:
+            plt.colorbar()
+            plt.title(f"{mode.capitalize()} latent space")
+            plt.show()
+            break
 
 
 if __name__ == '__main__':
@@ -92,30 +108,37 @@ if __name__ == '__main__':
     # dataloader = get_my_dataloader(batch_size=32)
     dataloader = train_loader
     # Define latent distribution
-    latent_spec = {'cont': 20, 'disc': [10, 5, 5, 2]}
+    latent_spec_desc = {'disc': [10, 5, 5, 2]}
+    latent_spec_cont = {'cont': 20}
+    latent_spec_both = {'cont': 20, 'disc': [10, 5, 5, 2]}
 
     # Build a Joint-VAE model
-    model = VAE(img_size=(3, 32, 32), latent_spec=latent_spec)
+    model_desc = VAE(img_size=(3, 32, 32), latent_spec=latent_spec_desc)
+    model_cont = VAE(img_size=(3, 32, 32), latent_spec=latent_spec_cont)
+    model_both = VAE(img_size=(3, 32, 32), latent_spec=latent_spec_both)
 
     # Build a trainer and train model
-    from torch.optim import Adam
-    optimizer = Adam(model.parameters())
-    trainer = Trainer(model, optimizer,
-                      cont_capacity=[0., 5., 25000, 30.],
-                      disc_capacity=[0., 5., 25000, 30.])
-    trainer.train(dataloader, epochs=7)
+    labels = ["model_desc","model_cont","model_both"]
+    Models= [model_desc, model_cont, model_both]
+    for i,model in enumerate([model_both]):
+        optimizer = Adam(model.parameters())
+        trainer = Trainer(model, optimizer,
+                          cont_capacity=[0., 5., 25000, 30.],
+                          disc_capacity=[0., 5., 25000, 30.])
+        trainer.train(dataloader, epochs=20)
+        torch.save(model, "C:\\Users\\RoiPapo\\Downloads\\ModelsVAE"+labels[i]+".pt")
 
-    # Visualize samples from the model
-    viz = Viz(model)
-    samples = viz.samples()
-    a= viz.latent_traversal_line()
-    b= viz.latent_traversal_grid()
-    c= viz.all_latent_traversals()
+        #
+        # # Visualize samples from the model
+        # viz = Viz(model)
+        # samples = viz.samples(filename=labels[i]+".png")
+        # a = viz.latent_traversal_line()
+        # b = viz.latent_traversal_grid()
+        # c = viz.all_latent_traversals()
+        #
+        # traversals = viz.latent_traversal_grid(cont_idx=2, cont_axis=1, disc_idx=0, disc_axis=0, size=(10, 10))
+        # ordering = [9, 3, 0, 5, 7, 6, 4, 8, 1, 2]  # The 9th dimension corresponds to 0, the 3rd to 1 etc...
+        # traversals = visualize.reorder_img(traversals, ordering, by_row=True)
+        plot_latent(autoencoder=model,data_loader=dataloader,mode=labels[i])
 
-    traversals = viz.latent_traversal_grid(cont_idx=2, cont_axis=1, disc_idx=0, disc_axis=0, size=(10, 10))
-    ordering = [9, 3, 0, 5, 7, 6, 4, 8, 1, 2]  # The 9th dimension corresponds to 0, the 3rd to 1 etc...
-    traversals = visualize.reorder_img(traversals, ordering, by_row=True)
-
-    # plt.imshow(traversals.numpy())
-
-
+        # plt.imshow(traversals.numpy())
